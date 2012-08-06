@@ -113,21 +113,34 @@ module Sunspot
 
           # Implementation of the next_batch! method.
           def next_batch!(queue)
-            conditions = {:run_at => {'$lte' => Time.now.utc}}
+            now = Time.now.utc
+            conditions = { :run_at => { '$lte' => now }}
+
             unless queue.class_names.empty?
-              conditions[:record_class_name] = {'$in' => queue.class_names}
+              conditions[:record_class_name] = { '$in' => queue.class_names }
             end
+
             entries = []
-            while entries.size < queue.batch_size
-              begin
-                lock = rand(0x7FFFFFFF)
-                doc = collection.find_and_modify(:update => {"$set" => {:run_at => Time.now.utc + queue.retry_interval, :error => nil, :lock => lock}}, :query => conditions, :limit => queue.batch_size, :sort => [[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]])
-                break unless doc
-                entries << new(doc)
-              rescue Mongo::OperationFailure
-                break
-              end
+            lock = rand(0x7FFFFFFF)
+            run_at = now + queue.retry_interval
+
+            begin
+              collection.
+                find(conditions).
+                limit(queue.batch_size).
+                sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).
+                each do |doc|
+                  doc = new(doc)
+                  doc.run_at = run_at
+                  doc.error = nil
+                  doc.lock = lock
+                  doc.save
+
+                  entries << doc
+                end
+            rescue Mongo::OperationFailure
             end
+
             entries
           end
 
@@ -223,6 +236,16 @@ module Sunspot
         # Set the entry error.
         def error=(value)
           doc['error'] =  value.nil? ? nil : value.to_s
+        end
+
+        # Get the entry lock value
+        def lock
+          doc['lock']
+        end
+
+        # Set the entry lock value
+        def lock=(value)
+          doc['lock'] = value
         end
 
         # Get the entry delete entry flag.
