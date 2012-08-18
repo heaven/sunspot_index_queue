@@ -22,6 +22,7 @@ module Sunspot
       def submit!
         Entry.load_all_records(entries)
         clear_processed(entries)
+
         begin
           # First try submitting the entries in a batch since that's the most efficient.
           # If there are errors, try each entry individually in case there's a bad document.
@@ -33,7 +34,8 @@ module Sunspot
           commit!
         rescue Exception => e
           @delete_entries.clear
-          entries.each{|entry| entry.processed = false}
+          clear_processed(entries)
+
           if PASS_THROUGH_EXCEPTIONS.include?(e.class)
             raise e
           else
