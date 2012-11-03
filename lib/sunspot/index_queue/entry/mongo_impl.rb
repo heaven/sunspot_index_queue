@@ -63,6 +63,19 @@ module Sunspot
             collection.find(selector, opts).collect { |doc| new(doc) }
           end
 
+          # Default conditions with included/excluded classes
+          def conditions(queue)
+            conditions = Hash.new
+
+            if queue.class_names.present? or queue.exclude_classes.present?
+              conditions[:record_class_name] = Hash.new
+              conditions[:record_class_name]["$in"] = queue.class_names if queue.class_names.present?
+              conditions[:record_class_name]["$nin"] = queue.exclude_classes if queue.exclude_classes.present?
+            end
+
+            conditions
+          end
+
           # Logger used to log errors.
           def logger
             @logger
@@ -75,46 +88,31 @@ module Sunspot
 
           # Implementation of the total_count method.
           def total_count(queue)
-            conditions = queue.class_names.empty? ? { } : { :record_class_name => { '$in' => queue.class_names } }
-            collection.find(conditions).count
+            collection.find(conditions(queue)).count
           end
 
           # Implementation of the ready_count method.
           def ready_count(queue)
-            conditions = { :run_at => { '$lte' => Time.now.utc }, :lock => nil }
-
-            unless queue.class_names.empty?
-              conditions[:record_class_name] = { '$in' => queue.class_names }
-            end
-
+            conditions = conditions(queue).merge({ :run_at => { '$lte' => Time.now.utc }, :lock => nil })
             collection.find(conditions).count
           end
 
           # Implementation of the error_count method.
           def error_count(queue)
-            conditions = { :error => { '$ne' => nil } }
-
-            unless queue.class_names.empty?
-              conditions[:record_class_name] = { '$in' => queue.class_names }
-            end
-
+            conditions = conditions(queue).merge({ :error => { '$ne' => nil } })
             collection.find(conditions).count
           end
 
           # Implementation of the errors method.
           def errors(queue, limit, offset)
-            conditions = { :error => { '$ne' => nil } }
-
-            unless queue.class_names.empty?
-              conditions[:record_class_name] = { '$in' => queue.class_names }
-            end
-
+            conditions = conditions(queue).merge({ :error => { '$ne' => nil } })
             find(conditions, :limit => limit, :skip => offset, :sort => :id)
           end
 
           # Implementation of the reset! method.
           def reset!(queue)
-            conditions = queue.class_names.empty? ? { } : { :record_class_name => { '$in' => queue.class_names } }
+            conditions = conditions(queue)
+
             collection.update(conditions, { "$set" => {
               :run_at => Time.now.utc, :attempts => 0, :error => nil, :lock => nil
             } }, :multi => true)
@@ -123,11 +121,7 @@ module Sunspot
           # Implementation of the next_batch! method.
           def next_batch!(queue)
             now = Time.now.utc
-            conditions = { :run_at => { '$lte' => now }, :lock => nil }
-
-            unless queue.class_names.empty?
-              conditions[:record_class_name] = { '$in' => queue.class_names }
-            end
+            conditions = conditions(queue).merge({ :run_at => { '$lte' => now }, :lock => nil })
 
             entries = []
             lock = rand(0x7FFFFFFF)

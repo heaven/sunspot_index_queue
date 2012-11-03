@@ -15,7 +15,7 @@ module Sunspot
     end
     
     attr_accessor :retry_interval, :batch_size
-    attr_reader :session, :class_names
+    attr_reader :session, :class_names, :exclude_classes
     
     class << self
       # Set the default priority for indexing items within a block. Higher priority items will be processed first.
@@ -47,17 +47,28 @@ module Sunspot
     # +:class_names+ - A list of class names that the queue will process. This can be used to have different
     # queues process different classes of records when they need to different configurations.
     #
+    # +:exclude_classes+ - A list of class names to exclude from the processing
+    #
     # +:session+ - The Sunspot::Session object to use for communicating with Solr (defaults to a session with the default config).
     def initialize(options = {})
       @retry_interval = options[:retry_interval] || 60
       @batch_size = options[:batch_size] || 100
       @batch_handler = nil
       @class_names = []
+      @exclude_classes = []
+
       if options[:class_names].is_a?(Array)
-        @class_names.concat(options[:class_names].collect{|name| name.to_s})
+        @class_names.concat(options[:class_names].collect { |name| name.to_s })
       elsif options[:class_names]
         @class_names << options[:class_names].to_s
       end
+
+      if options[:exclude_classes].is_a?(Array)
+        @exclude_classes.concat(options[:exclude_classes].collect { |name| name.to_s })
+      elsif options[:exclude_classes]
+        @exclude_classes << options[:exclude_classes].to_s
+      end
+
       @session = options[:session] || Sunspot::Session.new
     end
     
