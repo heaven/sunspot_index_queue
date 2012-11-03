@@ -145,7 +145,7 @@ module Sunspot
                 doc.save
 
                 entries << doc
-              end rescue Mongo::OperationFailure nil
+              end rescue nil
 
             entries
           end
