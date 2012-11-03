@@ -3,19 +3,19 @@ module Sunspot
     # Batch of entries to be indexed with Solr.
     class Batch
       attr_reader :entries
-      
+
       # Errors that cause batch processing to stop and are immediately passed on to the caller. All other
       # are logged on the entry on the assumption that they can be fixed later while other entries can still
       # be processed.
       PASS_THROUGH_EXCEPTIONS = [SystemExit, NoMemoryError, Interrupt, SignalException, Errno::ECONNREFUSED]
-      
+
       def initialize(queue, entries = nil)
         @queue = queue
         @entries = []
         @entries.concat(entries) if entries
         @delete_entries = []
       end
-      
+
       # Submit the entries to solr. If they are successfully committed, the entries will be deleted.
       # Otherwise, any entries that generated errors will be updated with the error messages and
       # set to be processed again in the future.
@@ -31,6 +31,7 @@ module Sunspot
               submit_entry(entry)
             end
           end
+
           commit!
         rescue Exception => e
           @delete_entries.clear
@@ -45,7 +46,7 @@ module Sunspot
       rescue Exception => e
         begin
           clear_processed(entries)
-          entries.each{|entry| entry.reset!} if PASS_THROUGH_EXCEPTIONS.include?(e.class)
+          entries.each { |entry| entry.reset! } if PASS_THROUGH_EXCEPTIONS.include?(e.class)
         ensure
           # Use a more specific error to indicate Solr is down.
           e = SolrNotResponding.new(e.message) if e.is_a?(Errno::ECONNREFUSED)
@@ -54,16 +55,16 @@ module Sunspot
       end
 
       private
-      
+
       def session
         @queue.session
       end
-      
+
       # Clear the processed flag on all entries.
       def clear_processed(entries)
-        entries.each{|entry| entry.processed = false}
+        entries.each { |entry| entry.processed = false }
       end
-      
+
       # Send the Solr commit command and delete the entries if it succeeds.
       def commit!
         session.commit
@@ -74,13 +75,13 @@ module Sunspot
       ensure
         @delete_entries.clear
       end
-      
+
       # Submit all entries to Solr individually and then commit.
       def submit_each_entry
         entries.each do |entry|
           submit_entry(entry)
         end
-        
+
         begin
           commit!
         rescue Exception => e
@@ -93,7 +94,7 @@ module Sunspot
           end
         end
       end
-      
+
       # Send an entry to Solr doing an update or delete as necessary.
       def submit_entry(entry)
         log_entry_error(entry) do
@@ -105,7 +106,7 @@ module Sunspot
           end
         end
       end
-      
+
       # Update an entry with an error message if a block fails.
       def log_entry_error(entry)
         begin

@@ -41,6 +41,7 @@ module Sunspot
               @collection.create_index([[:record_class_name, Mongo::ASCENDING], [:record_id, Mongo::ASCENDING]])
               @collection.create_index([[:run_at, Mongo::ASCENDING], [:record_class_name, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]])
             end
+
             @collection
           end
 
@@ -52,14 +53,14 @@ module Sunspot
           end
 
           # Find one entry given a selector or object id.
-          def find_one(spec_or_object_id=nil, opts={})
+          def find_one(spec_or_object_id=nil, opts={ })
             doc = collection.find_one(spec_or_object_id, opts)
             doc ? new(doc) : nil
           end
 
           # Find an array of entries given a selector.
-          def find(selector={}, opts={})
-            collection.find(selector, opts).collect{|doc| new(doc)}
+          def find(selector={ }, opts={ })
+            collection.find(selector, opts).collect { |doc| new(doc) }
           end
 
           # Logger used to log errors.
@@ -74,47 +75,55 @@ module Sunspot
 
           # Implementation of the total_count method.
           def total_count(queue)
-            conditions = queue.class_names.empty? ? {} : {:record_class_name => {'$in' => queue.class_names}}
+            conditions = queue.class_names.empty? ? { } : { :record_class_name => { '$in' => queue.class_names } }
             collection.find(conditions).count
           end
 
           # Implementation of the ready_count method.
           def ready_count(queue)
-            conditions = {:run_at => {'$lte' => Time.now.utc}}
+            conditions = { :run_at => { '$lte' => Time.now.utc }, :lock => nil }
+
             unless queue.class_names.empty?
-              conditions[:record_class_name] = {'$in' => queue.class_names}
+              conditions[:record_class_name] = { '$in' => queue.class_names }
             end
+
             collection.find(conditions).count
           end
 
           # Implementation of the error_count method.
           def error_count(queue)
-            conditions = {:error => {'$ne' => nil}}
+            conditions = { :error => { '$ne' => nil } }
+
             unless queue.class_names.empty?
-              conditions[:record_class_name] = {'$in' => queue.class_names}
+              conditions[:record_class_name] = { '$in' => queue.class_names }
             end
+
             collection.find(conditions).count
           end
 
           # Implementation of the errors method.
           def errors(queue, limit, offset)
-            conditions = {:error => {'$ne' => nil}}
+            conditions = { :error => { '$ne' => nil } }
+
             unless queue.class_names.empty?
-              conditions[:record_class_name] = {'$in' => queue.class_names}
+              conditions[:record_class_name] = { '$in' => queue.class_names }
             end
+
             find(conditions, :limit => limit, :skip => offset, :sort => :id)
           end
 
           # Implementation of the reset! method.
           def reset!(queue)
-            conditions = queue.class_names.empty? ? {} : {:record_class_name => {'$in' => queue.class_names}}
-            collection.update(conditions, {"$set" => {:run_at => Time.now.utc, :attempts => 0, :error => nil}}, :multi => true)
+            conditions = queue.class_names.empty? ? { } : { :record_class_name => { '$in' => queue.class_names } }
+            collection.update(conditions, { "$set" => {
+              :run_at => Time.now.utc, :attempts => 0, :error => nil, :lock => nil
+            } }, :multi => true)
           end
 
           # Implementation of the next_batch! method.
           def next_batch!(queue)
             now = Time.now.utc
-            conditions = { :run_at => { '$lte' => now }}
+            conditions = { :run_at => { '$lte' => now }, :lock => nil }
 
             unless queue.class_names.empty?
               conditions[:record_class_name] = { '$in' => queue.class_names }
@@ -124,29 +133,26 @@ module Sunspot
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
 
-            begin
-              collection.
-                find(conditions).
-                limit(queue.batch_size).
-                sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).
-                each do |doc|
-                  doc = new(doc)
-                  doc.run_at = run_at
-                  doc.error = nil
-                  doc.lock = lock
-                  doc.save
+            collection.
+              find(conditions).
+              limit(queue.batch_size).
+              sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).
+              each do |doc|
+                doc = new(doc)
+                doc.run_at = run_at
+                doc.error = nil
+                doc.lock = lock
+                doc.save
 
-                  entries << doc
-                end
-            rescue Mongo::OperationFailure
-            end
+                entries << doc
+              end rescue Mongo::OperationFailure nil
 
             entries
           end
 
           # Implementation of the add method.
           def add(klass, id, delete, priority)
-            queue_entry_key = {:record_id => id, :record_class_name => klass.name, :lock => nil}
+            queue_entry_key = { :record_id => id, :record_class_name => klass.name, :lock => nil }
             queue_entry = find_one(queue_entry_key) || new(queue_entry_key.merge(:priority => priority))
             queue_entry.is_delete = delete
             queue_entry.priority = priority if priority > queue_entry.priority
@@ -156,15 +162,15 @@ module Sunspot
 
           # Implementation of the delete_entries method.
           def delete_entries(entries)
-            collection.remove(:_id => {'$in' => entries.map(&:id)})
+            collection.remove(:_id => { '$in' => entries.map(&:id) })
           end
         end
 
         attr_reader :doc
 
         # Create a new entry from a document hash.
-        def initialize(attributes = {})
-          @doc = {}
+        def initialize(attributes = { })
+          @doc = { }
           attributes.each do |key, value|
             @doc[key.to_s] = value
           end
@@ -184,7 +190,7 @@ module Sunspot
 
         # Set the entry record_class_name.
         def record_class_name=(value)
-          doc['record_class_name'] =  value.nil? ? nil : value.to_s
+          doc['record_class_name'] = value.nil? ? nil : value.to_s
         end
 
         # Get the entry id.
@@ -194,7 +200,7 @@ module Sunspot
 
         # Set the entry record_id.
         def record_id=(value)
-          doc['record_id'] =  value
+          doc['record_id'] = value
         end
 
         # Get the entry run_at time.
@@ -205,7 +211,7 @@ module Sunspot
         # Set the entry run_at time.
         def run_at=(value)
           value = Time.parse(value.to_s) unless value.nil? || value.is_a?(Time)
-          doc['run_at'] =  value.nil? ? nil : value.utc
+          doc['run_at'] = value.nil? ? nil : value.utc
         end
 
         # Get the entry priority.
@@ -215,7 +221,7 @@ module Sunspot
 
         # Set the entry priority.
         def priority=(value)
-          doc['priority'] =  value.to_i
+          doc['priority'] = value.to_i
         end
 
         # Get the entry attempts.
@@ -225,7 +231,7 @@ module Sunspot
 
         # Set the entry attempts.
         def attempts=(value)
-          doc['attempts'] =  value.to_i
+          doc['attempts'] = value.to_i
         end
 
         # Get the entry error.
@@ -235,7 +241,7 @@ module Sunspot
 
         # Set the entry error.
         def error=(value)
-          doc['error'] =  value.nil? ? nil : value.to_s
+          doc['error'] = value.nil? ? nil : value.to_s
         end
 
         # Get the entry lock value
@@ -255,7 +261,7 @@ module Sunspot
 
         # Set the entry delete entry flag.
         def is_delete=(value)
-          doc['is_delete'] =  !!value
+          doc['is_delete'] = !!value
         end
 
         # Save the entry to the database.
@@ -266,11 +272,12 @@ module Sunspot
 
         # Implementation of the set_error! method.
         def set_error!(error, retry_interval = nil)
-          self.attempts += 1
-          self.run_at = (retry_interval * attempts).from_now.utc if retry_interval
-          self.error = "#{error.class.name}: #{error.message}\n#{error.backtrace.join("\n")[0, 4000]}"
           begin
-            save
+            self.attempts += 1
+            self.lock = nil
+            self.error = "#{error.class.name}: #{error.message}\n#{error.backtrace.join("\n")[0, 4000]}"
+            self.run_at = (retry_interval * attempts).from_now.utc if retry_interval
+            self.save
           rescue => e
             if self.class.logger
               self.class.logger.warn(error)
@@ -282,8 +289,9 @@ module Sunspot
         # Implementation of the reset! method.
         def reset!
           begin
-            self.error = nil
             self.attempts = 0
+            self.lock = nil
+            self.error = nil
             self.run_at = Time.now.utc
             self.save
           rescue => e

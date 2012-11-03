@@ -36,54 +36,57 @@ module Sunspot
           end
           @implementation = klass
         end
-        
+
         # The implementation class used for the queue.
         def implementation
           @implementation ||= ActiveRecordImpl
         end
-        
+
         # Get a count of the queue entries for an IndexQueue. Implementations must implement this method.
         def total_count(queue)
           implementation.total_count(queue)
         end
-        
+
         # Get a count of the entries ready to be processed for an IndexQueue. Implementations must implement this method.
         def ready_count(queue)
           implementation.ready_count(queue)
         end
-        
+
         # Get a count of the error entries for an IndexQueue. Implementations must implement this method.
         def error_count(queue)
           implementation.error_count(queue)
         end
-        
+
         # Get the specified number of error entries for an IndexQueue. Implementations must implement this method.
         def errors(queue, limit, offset)
           implementation.errors(queue, limit, offset)
         end
-        
+
         # Get the next batch of entries to process for IndexQueue. Implementations must implement this method.
         def next_batch!(queue)
           implementation.next_batch!(queue)
         end
-        
+
         # Reset the entries in the queue to be excuted again immediately and clear any errors.
         def reset!(queue)
           implementation.reset!(queue)
         end
-        
+
         # Add an entry the queue. +is_delete+ will be true if the entry is a delete. Implementations must implement this method.
         def add(klass, id, delete, options = {})
           raise NotImplementedError.new("add")
         end
-        
+
         # Add multiple entries to the queue. +delete+ will be true if the entry is a delete.
         def enqueue(queue, klass, ids, delete, priority)
           klass = Sunspot::Util.full_const_get(klass.to_s) unless klass.is_a?(Class)
+
           unless queue.class_names.empty? || queue.class_names.include?(klass.name)
             raise ArgumentError.new("Class #{klass.name} is not in the class names allowed for the queue")
           end
+
           priority = priority.to_i
+
           if ids.is_a?(Array)
             ids.each do |id|
               implementation.add(klass, id, delete, priority)
@@ -92,46 +95,46 @@ module Sunspot
             implementation.add(klass, ids, delete, priority)
           end
         end
-        
+
         # Delete entries from the queue. Implementations must implement this method.
         def delete_entries(entries)
           implementation.delete_entries(entries)
         end
-        
-        # Load all records in an array of entries. This can be faster than calling load on each DataAccessor
+
+        # Load all records in an array of entries.
+        # This can be faster than calling load on each DataAccessor
         # depending on the implementation
         def load_all_records(entries)
-          #First create maps for classes => ids and  "Classname id" => entry
-          class_id_map = {}
-          entry_map = {}
-          entries.each do |entry|
-            classname = Sunspot::Util.full_const_get(entry.record_class_name)
-            class_id_map[classname] = [] if class_id_map[classname].nil?
-            class_id_map[classname] << entry.record_id
-            entry_map["#{classname} #{entry.record_id}"] = entry
-          end
-          class_id_map.each do |klass, ids|
+          entries.group_by { |e| e.record_class_name }.each do |class_name, entries|
+            ids = entries.find_all { |r| not r.is_delete? }.map(&:record_id)
+            klass = Sunspot::Util.full_const_get(class_name)
             adapter = Sunspot::Adapters::DataAccessor.create(klass)
-            if klass.respond_to?(:sunspot_options) && klass.sunspot_options && klass.sunspot_options[:include] && adapter.respond_to?(:include=)
-              adapter.include = klass.sunspot_options[:include]
+
+            if klass.respond_to?(:sunspot_options) && adapter.respond_to?(:include=)
+              adapter.include = klass.sunspot_options[:include] rescue nil
             end
+
             adapter.load_all(ids).each do |record|
-              entry = entry_map["#{klass} #{Sunspot::Adapters::InstanceAdapter.adapt(record).id}"]
-              entry.instance_variable_set(:@record, record) if entry
+              entry = entries.find { |r| r.record_id == record.id }
+              entry.record = record if entry
             end
           end
         end
-        
       end
-      
+
       def processed?
         @processed = false unless defined?(@processed)
         @processed
       end
-      
+
       # Get the record represented by this entry.
       def record
         @record ||= Sunspot::Adapters::DataAccessor.create(Sunspot::Util.full_const_get(record_class_name)).load_all([record_id]).first
+      end
+
+      # Set the record represented by the entry
+      def record=(obj)
+        @record = obj
       end
 
       # Set the error message on an entry. Implementations must implement this method.
