@@ -123,25 +123,24 @@ module Sunspot
             now = Time.now.utc
             conditions = conditions(queue).merge({ :run_at => { '$lte' => now }, :lock => nil })
 
-            entries = []
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
 
-            collection.
+            docs = collection.
               find(conditions).
               limit(queue.batch_size).
-              sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).
-              each do |doc|
-                doc = new(doc)
-                doc.run_at = run_at
-                doc.error = nil
-                doc.lock = lock
-                doc.save
+              sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).to_a
 
-                entries << doc
-              end rescue nil
+            collection.update({
+              :_id => { "$in" => docs.map { |d| d["_id"] } }
+            }, {
+              "$set" => {
+                :error => nil,
+                :lock => lock,
+                :run_at => run_at }
+            }, :multi => true)
 
-            entries
+            docs.map { |d| new(d.merge("run_at" => run_at, "lock" => lock, "error" => nil)) }
           end
 
           # Implementation of the add method.
