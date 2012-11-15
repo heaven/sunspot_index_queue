@@ -148,20 +148,24 @@ module Sunspot
     # away and a Sunspot::IndexQueue::SolrNotResponding exception is raised.
     def process
       count = 0
+
       loop do
         entries = Entry.next_batch!(self)
         if entries.nil? || entries.empty?
           break if Entry.ready_count(self) == 0
         else
           batch = Batch.new(self, entries)
+
           if defined?(@batch_handler) && @batch_handler
             @batch_handler.call(batch)
           else
             batch.submit!
           end
-          count += entries.select{|e| e.processed? }.size
+
+          count += entries.select{ |e| e.processed? }.size
         end
       end
+
       count
     end
     

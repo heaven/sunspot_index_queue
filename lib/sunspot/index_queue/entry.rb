@@ -34,6 +34,7 @@ module Sunspot
               klass = const_get("#{class_name}Impl")
             end
           end
+
           @implementation = klass
         end
 
