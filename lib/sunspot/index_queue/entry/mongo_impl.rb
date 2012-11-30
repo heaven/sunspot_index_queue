@@ -128,8 +128,8 @@ module Sunspot
 
             docs = collection.
               find(conditions).
-              limit(queue.batch_size).
-              sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).to_a
+              sort([[:run_at, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]]).
+              limit(queue.batch_size).to_a
 
             collection.update({
               :_id => { "$in" => docs.map { |d| d["_id"] } }
