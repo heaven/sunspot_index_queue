@@ -38,8 +38,18 @@ module Sunspot
           def collection
             unless @collection
               @collection = connection.db(@database_name)["sunspot_index_queue_entries"]
-              @collection.create_index([[:record_class_name, Mongo::ASCENDING], [:record_id, Mongo::ASCENDING]])
-              @collection.create_index([[:run_at, Mongo::ASCENDING], [:record_class_name, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]])
+
+              @collection.create_index([
+                [:record_class_name, Mongo::ASCENDING],
+                [:record_id, Mongo::ASCENDING]
+              ])
+
+              @collection.create_index([
+                [:record_class_name, Mongo::ASCENDING],
+                [:run_at, Mongo::ASCENDING],
+                [:lock, Mongo::ASCENDING],
+                [:priority, Mongo::DESCENDING]
+              ])
             end
 
             @collection
@@ -128,7 +138,7 @@ module Sunspot
 
             docs = collection.
               find(conditions).
-              sort([[:run_at, Mongo::ASCENDING], [:record_class_name, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]]).
+              sort([[:record_class_name, Mongo::ASCENDING], [:run_at, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]]).
               limit(queue.batch_size).to_a
 
             collection.update({
