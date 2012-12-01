@@ -128,7 +128,7 @@ module Sunspot
 
             docs = collection.
               find(conditions).
-              sort([[:run_at, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]]).
+              sort([[:run_at, Mongo::ASCENDING], [:record_class_name, Mongo::ASCENDING], [:priority, Mongo::DESCENDING]]).
               limit(queue.batch_size).to_a
 
             collection.update({
