@@ -15,7 +15,7 @@ module Sunspot
     end
     
     attr_accessor :retry_interval, :batch_size
-    attr_reader :session, :class_names, :exclude_classes
+    attr_reader :session, :class_names, :exclude_classes, :autocommit
     
     class << self
       # Set the default priority for indexing items within a block. Higher priority items will be processed first.
@@ -51,6 +51,7 @@ module Sunspot
     #
     # +:session+ - The Sunspot::Session object to use for communicating with Solr (defaults to a session with the default config).
     def initialize(options = {})
+      @autocommit = options[:autocommit].is_a?(TrueClass)
       @retry_interval = options[:retry_interval] || 60
       @batch_size = options[:batch_size] || 100
       @batch_handler = nil
