@@ -11,16 +11,16 @@ module Sunspot
       #   Sunspot::IndexQueue::Entry::MongoImpl.connection = 'localhost'
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       #   # or
-      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Mongo::Connection.new('localhost', 27017)
+      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Mongo::MongoClient.new('localhost', 27017)
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       class MongoImpl
         include Entry
 
         class << self
-          # Set the connection to MongoDB. The args can either be a Mongo::Connection object, or the args
-          # that can be used to create a new Mongo::Connection.
+          # Set the connection to MongoDB. The args can either be a Mongo::MongoClient object, or the args
+          # that can be used to create a new Mongo::MongoClient.
           def connection=(*args)
-            @connection = args.first.is_a?(Mongo::Connection) ? args.first : Mongo::Connection.new(*args)
+            @connection = args.first.is_a?(Mongo::MongoClient) ? args.first : Mongo::MongoClient.new(*args)
           end
 
           # Get the connection currently in use.
