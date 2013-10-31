@@ -33,8 +33,9 @@ module Sunspot
         end
       ensure
         # Avoid memory leaks when processing queue in multiple threads
-        self.delete_entries.clear
-        self.entries.clear
+        @queue = nil
+        @entries.clear
+        @delete_entries.clear
       end
 
       private
