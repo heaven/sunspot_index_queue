@@ -45,10 +45,10 @@ module Sunspot
               ])
 
               @collection.create_index([
+                [:priority, Mongo::DESCENDING],
                 [:record_class_name, Mongo::ASCENDING],
                 [:run_at, Mongo::ASCENDING],
-                [:lock, Mongo::ASCENDING],
-                [:priority, Mongo::DESCENDING]
+                [:lock, Mongo::ASCENDING]
               ])
             end
 
@@ -138,7 +138,7 @@ module Sunspot
 
             docs = collection.
               find(conditions).
-              sort([[:priority, Mongo::DESCENDING], [:run_at, Mongo::ASCENDING]]).
+              sort([[:priority, Mongo::DESCENDING], [:record_class_name, Mongo::ASCENDING], [:run_at, Mongo::ASCENDING]]).
               limit(queue.batch_size).to_a
 
             collection.update({
