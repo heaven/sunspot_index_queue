@@ -1,10 +1,12 @@
 # -*- encoding: utf-8 -*-
+# stub: sunspot_index_queue 1.1.4 ruby lib
 
 Gem::Specification.new do |s|
   s.name = "sunspot_index_queue"
   s.version = "1.1.4"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
+  s.require_paths = ["lib"]
   s.authors = ["Brian Durand"]
   s.date = "2012-06-19"
   s.description = "This gem provides asynchronous indexing to Solr for the sunspot gem. It uses a pluggable model for the backing queue and provides support for ActiveRecord, DataMapper, and MongoDB out of the box."
@@ -13,8 +15,7 @@ Gem::Specification.new do |s|
   s.files = [".travis.yml", "CHANGE_LOG.txt", "MIT_LICENSE", "README.rdoc", "Rakefile", "VERSION", "lib/sunspot/index_queue.rb", "lib/sunspot/index_queue/batch.rb", "lib/sunspot/index_queue/entry.rb", "lib/sunspot/index_queue/entry/active_record_impl.rb", "lib/sunspot/index_queue/entry/data_mapper_impl.rb", "lib/sunspot/index_queue/entry/mongo_impl.rb", "lib/sunspot/index_queue/entry/redis_impl.rb", "lib/sunspot/index_queue/session_proxy.rb", "lib/sunspot_index_queue.rb", "spec/active_record_impl_spec.rb", "spec/batch_spec.rb", "spec/data_mapper_impl_spec.rb", "spec/entry_impl_examples.rb", "spec/entry_spec.rb", "spec/index_queue_spec.rb", "spec/integration_spec.rb", "spec/mongo_impl_spec.rb", "spec/redis_impl_spec.rb", "spec/session_proxy_spec.rb", "spec/spec_helper.rb", "sunspot_index_queue.gemspec"]
   s.homepage = "http://github.com/bdurand/sunspot_index_queue"
   s.rdoc_options = ["--charset=UTF-8", "--main", "README.rdoc", "MIT_LICENSE"]
-  s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.25"
+  s.rubygems_version = "2.2.2"
   s.summary = "Asynchronous Solr indexing support for the sunspot gem with an emphasis on reliablity and throughput."
 
   if s.respond_to? :specification_version then

@@ -20,7 +20,8 @@ module Sunspot
           # Set the connection to MongoDB. The args can either be a Mongo::MongoClient object, or the args
           # that can be used to create a new Mongo::MongoClient.
           def connection=(*args)
-            @connection = args.first.is_a?(Mongo::MongoClient) ? args.first : Mongo::MongoClient.new(*args)
+            @connection = args.first.is_a?(Mongo::Client) ? args.first : Mongo::Client.new(*args)
+            @database_name = @connection.database.name
           end
 
           # Get the connection currently in use.
@@ -37,19 +38,19 @@ module Sunspot
           # Get the collection used to store the queue.
           def collection
             unless @collection
-              @collection = connection.db(@database_name)["sunspot_index_queue_entries"]
+              @collection = @connection.use(@database_name).database["sunspot_index_queue_entries"]
 
-              @collection.create_index([
-                [:record_class_name, Mongo::ASCENDING],
-                [:record_id, Mongo::ASCENDING]
-              ])
+              @collection.indexes.ensure(
+                :record_class_name => Mongo::Index::ASCENDING,
+                :record_id => Mongo::Index::ASCENDING
+              )
 
-              @collection.create_index([
-                [:priority, Mongo::DESCENDING],
-                [:record_class_name, Mongo::ASCENDING],
-                [:run_at, Mongo::ASCENDING],
-                [:lock, Mongo::ASCENDING]
-              ])
+              @collection.indexes.ensure(
+                :priority => Mongo::Index::DESCENDING,
+                :record_class_name => Mongo::Index::ASCENDING,
+                :run_at => Mongo::Index::ASCENDING,
+                :lock => Mongo::Index::ASCENDING
+              )
             end
 
             @collection
@@ -63,13 +64,13 @@ module Sunspot
           end
 
           # Find one entry given a selector or object id.
-          def find_one(spec_or_object_id=nil, opts={ })
+          def find_one(spec_or_object_id=nil, opts={})
             doc = collection.find_one(spec_or_object_id, opts)
             doc ? new(doc) : nil
           end
 
           # Find an array of entries given a selector.
-          def find(selector={ }, opts={ })
+          def find(selector={}, opts={})
             collection.find(selector, opts).collect { |doc| new(doc) }
           end
 
@@ -136,10 +137,11 @@ module Sunspot
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
 
-            docs = collection.
-              find(conditions).
-              sort([[:priority, Mongo::DESCENDING], [:record_class_name, Mongo::ASCENDING], [:run_at, Mongo::ASCENDING]]).
-              limit(queue.batch_size).to_a
+            docs = collection.find(conditions).sort([
+              [:priority, Mongo::Index::DESCENDING],
+              [:record_class_name, Mongo::Index::ASCENDING],
+              [:run_at, Mongo::Index::ASCENDING]
+            ]).limit(queue.batch_size).to_a
 
             collection.update({
               :_id => { "$in" => docs.map { |d| d["_id"] } }
@@ -172,8 +174,8 @@ module Sunspot
         attr_reader :doc
 
         # Create a new entry from a document hash.
-        def initialize(attributes = { })
-          @doc = { }
+        def initialize(attributes = {})
+          @doc = {}
           attributes.each do |key, value|
             @doc[key.to_s] = value
           end
@@ -306,6 +308,12 @@ module Sunspot
           value.is_a?(self.class) && ((id && id == value.id) || (doc == value.doc))
         end
       end
+    end
+  end
+
+  class Mongo::Server::Description
+    def standalone?
+      replica_set_name.nil? && !mongos? && !ghost?
     end
   end
 end
