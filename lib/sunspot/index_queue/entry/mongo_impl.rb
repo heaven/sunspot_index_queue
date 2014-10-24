@@ -117,28 +117,28 @@ module Sunspot
             conditions = conditions(queue).merge({ :run_at => { '$lte' => now }, :lock => nil })
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
-            docs = []
+            # docs = []
+            #
+            # loop do
+            #   docs << collection.find(conditions).
+            #     sort(:priority => -1, :record_class_name => 1, :run_at => 1).
+            #     modify({ '$set' => { :error => nil, :lock => lock, :run_at => run_at } }, { :new => true })
+            #
+            #   break if docs.size == queue.batch_size or not docs.last
+            # end
+            #
+            # docs.compact.map { |doc| new(doc) }
 
             # Perform just 2 queries instead of 100,
             #  can't work with multiple batch processors
-            # docs = collection.find(conditions).
-            #   sort(:priority => -1, :record_class_name => 1, :run_at => 1).
-            #   limit(queue.batch_size).to_a
-            #
-            # collection.find('_id' => { '$in' => docs.map { |d| d['_id'] }}).
-            #   update_all('$set' => { :error => nil, :lock => lock, :run_at => run_at })
-            #
-            # docs.map { |d| new(d.merge('run_at' => run_at, 'lock' => lock, 'error' => nil)) }
+            docs = collection.find(conditions).
+              sort(:priority => -1, :record_class_name => 1, :run_at => 1).
+              limit(queue.batch_size).to_a
 
-            loop do
-              docs << collection.find(conditions).
-                sort(:priority => -1, :record_class_name => 1, :run_at => 1).
-                modify({ '$set' => { :error => nil, :lock => lock, :run_at => run_at } }, { :new => true })
+            collection.find('_id' => { '$in' => docs.map { |d| d['_id'] }}).
+              update_all('$set' => { :error => nil, :lock => lock, :run_at => run_at })
 
-              break if docs.size == queue.batch_size or not docs.last
-            end
-
-            docs.compact.map { |doc| new(doc) }
+            docs.map { |d| new(d.merge('run_at' => run_at, 'lock' => lock, 'error' => nil)) }
           end
 
           # Implementation of the add method.
