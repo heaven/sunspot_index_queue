@@ -66,8 +66,8 @@ describe Sunspot::IndexQueue::SessionProxy do
   context "indexing methods" do
     
     subject { Sunspot::IndexQueue::SessionProxy.new(queue, session) }
-    let(:session) { mock(:session) }
-    let(:queue) { Sunspot::IndexQueue.new(:session => mock(:queue_session)) }
+    let(:session) { double(:session) }
+    let(:queue) { Sunspot::IndexQueue.new(:session => double(:queue_session)) }
     
     it "should yield the block to batch" do
       executed = false
@@ -90,13 +90,13 @@ describe Sunspot::IndexQueue::SessionProxy do
     end
     
     it "should not mark deletes as dirty" do
-      Sunspot::IndexQueue::Entry.implementation.stub!(:add)
+      Sunspot::IndexQueue::Entry.implementation.stub(:add)
       subject.remove(Sunspot::IndexQueue::Test::Searchable.new(1))
       subject.delete_dirty?.should == false
     end
     
     it "should not mark the session as dirty" do
-      Sunspot::IndexQueue::Entry.implementation.stub!(:add)
+      Sunspot::IndexQueue::Entry.implementation.stub(:add)
       subject.index(Sunspot::IndexQueue::Test::Searchable.new(1))
       subject.delete_dirty?.should == false
     end

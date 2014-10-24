@@ -1,17 +1,17 @@
-require 'mongo'
+require 'moped'
 
 module Sunspot
   class IndexQueue
     module Entry
       # Implementation of an indexing queue backed by MongoDB (http://mongodb.org/). This implementation
-      # uses the mongo gem directly and so is independent of any ORM you may be using.
+      # uses the moped gem directly and so is independent of any ORM you may be using.
       #
       # To set it up, you need to set the connection and database that it will use.
       #
       #   Sunspot::IndexQueue::Entry::MongoImpl.connection = 'localhost'
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       #   # or
-      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Mongo::MongoClient.new('localhost', 27017)
+      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Moped::Session.new(['localhost:27017'])
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       class MongoImpl
         include Entry
@@ -19,9 +19,9 @@ module Sunspot
         class << self
           # Set the connection to MongoDB. The args can either be a Mongo::MongoClient object, or the args
           # that can be used to create a new Mongo::MongoClient.
-          def connection=(*args)
-            @connection = args.first.is_a?(Mongo::Client) ? args.first : Mongo::Client.new(*args)
-            @database_name = @connection.database.name
+          def connection=(session, options = {})
+            @connection = session.is_a?(Moped::Session) ? session : Moped::Session.new(session, options)
+            @database_name = @connection.options[:database]
           end
 
           # Get the connection currently in use.
@@ -38,19 +38,10 @@ module Sunspot
           # Get the collection used to store the queue.
           def collection
             unless @collection
-              @collection = @connection.use(@database_name).database["sunspot_index_queue_entries"]
+              @collection = @connection.use(@database_name)["sunspot_index_queue_entries"]
 
-              @collection.indexes.ensure(
-                :record_class_name => Mongo::Index::ASCENDING,
-                :record_id => Mongo::Index::ASCENDING
-              )
-
-              @collection.indexes.ensure(
-                :priority => Mongo::Index::DESCENDING,
-                :record_class_name => Mongo::Index::ASCENDING,
-                :run_at => Mongo::Index::ASCENDING,
-                :lock => Mongo::Index::ASCENDING
-              )
+              @collection.indexes.create(:record_class_name => 1, :record_id => 1)
+              @collection.indexes.create(:priority => -1, :record_class_name => 1, :run_at => 1, :lock => 1)
             end
 
             @collection
@@ -64,24 +55,19 @@ module Sunspot
           end
 
           # Find one entry given a selector or object id.
-          def find_one(spec_or_object_id=nil, opts={})
-            doc = collection.find_one(spec_or_object_id, opts)
-            doc ? new(doc) : nil
-          end
-
-          # Find an array of entries given a selector.
-          def find(selector={}, opts={})
-            collection.find(selector, opts).collect { |doc| new(doc) }
+          def find_one(spec)
+            doc = collection.find(spec.is_a?(Hash) ? spec : {}.merge('_id' => spec)).first
+            new(doc) if doc
           end
 
           # Default conditions with included/excluded classes
           def conditions(queue)
             conditions = Hash.new
 
-            if queue.class_names.present? or queue.exclude_classes.present?
+            if queue.class_names.any? or queue.exclude_classes.any?
               conditions[:record_class_name] = Hash.new
-              conditions[:record_class_name]["$in"] = queue.class_names if queue.class_names.present?
-              conditions[:record_class_name]["$nin"] = queue.exclude_classes if queue.exclude_classes.present?
+              conditions[:record_class_name]['$in'] = queue.class_names if queue.class_names.any?
+              conditions[:record_class_name]['$nin'] = queue.exclude_classes if queue.exclude_classes.any?
             end
 
             conditions
@@ -104,55 +90,55 @@ module Sunspot
 
           # Implementation of the ready_count method.
           def ready_count(queue)
-            conditions = conditions(queue).merge({ :run_at => { '$lte' => Time.now.utc }, :lock => nil })
-            collection.find(conditions).count
+            collection.find(conditions(queue).merge({ :run_at => { '$lte' => Time.now.utc }, :lock => nil })).count
           end
 
           # Implementation of the error_count method.
           def error_count(queue)
-            conditions = conditions(queue).merge({ :error => { '$ne' => nil } })
-            collection.find(conditions).count
+            collection.find(conditions(queue).merge({ :error => { '$ne' => nil } })).count
           end
 
           # Implementation of the errors method.
-          def errors(queue, limit, offset)
+          def errors(queue, limit = 0, skip = 0)
             conditions = conditions(queue).merge({ :error => { '$ne' => nil } })
-            find(conditions, :limit => limit, :skip => offset, :sort => :id)
+            collection.find(conditions).limit(limit).skip(skip).sort(:id => 1).map { |doc| new(doc) }
           end
 
           # Implementation of the reset! method.
           def reset!(queue)
-            conditions = conditions(queue)
-
-            collection.update(conditions, { "$set" => {
+            collection.find(conditions(queue)).update_all('$set' => {
               :run_at => Time.now.utc, :attempts => 0, :error => nil, :lock => nil
-            } }, :multi => true)
+            })
           end
 
           # Implementation of the next_batch! method.
           def next_batch!(queue)
             now = Time.now.utc
             conditions = conditions(queue).merge({ :run_at => { '$lte' => now }, :lock => nil })
-
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
+            docs = []
 
-            docs = collection.find(conditions).sort([
-              [:priority, Mongo::Index::DESCENDING],
-              [:record_class_name, Mongo::Index::ASCENDING],
-              [:run_at, Mongo::Index::ASCENDING]
-            ]).limit(queue.batch_size).to_a
+            # Perform just 2 queries instead of 100,
+            #  can't work with multiple batch processors
+            # docs = collection.find(conditions).
+            #   sort(:priority => -1, :record_class_name => 1, :run_at => 1).
+            #   limit(queue.batch_size).to_a
+            #
+            # collection.find('_id' => { '$in' => docs.map { |d| d['_id'] }}).
+            #   update_all('$set' => { :error => nil, :lock => lock, :run_at => run_at })
+            #
+            # docs.map { |d| new(d.merge('run_at' => run_at, 'lock' => lock, 'error' => nil)) }
 
-            collection.update({
-              :_id => { "$in" => docs.map { |d| d["_id"] } }
-            }, {
-              "$set" => {
-                :error => nil,
-                :lock => lock,
-                :run_at => run_at }
-            }, :multi => true)
+            loop do
+              docs << collection.find(conditions).
+                sort(:priority => -1, :record_class_name => 1, :run_at => 1).
+                modify({ '$set' => { :error => nil, :lock => lock, :run_at => run_at } }, { :new => true })
 
-            docs.map { |d| new(d.merge("run_at" => run_at, "lock" => lock, "error" => nil)) }
+              break if docs.size == queue.batch_size or not docs.last
+            end
+
+            docs.compact.map { |doc| new(doc) }
           end
 
           # Implementation of the add method.
@@ -167,7 +153,7 @@ module Sunspot
 
           # Implementation of the delete_entries method.
           def delete_entries(entries)
-            collection.remove(:_id => { '$in' => entries.map(&:id) })
+            collection.find(:_id => { '$in' => entries.map(&:id) }).remove_all
           end
         end
 
@@ -176,9 +162,11 @@ module Sunspot
         # Create a new entry from a document hash.
         def initialize(attributes = {})
           @doc = {}
+
           attributes.each do |key, value|
             @doc[key.to_s] = value
           end
+
           @doc['priority'] = 0 unless doc['priority']
           @doc['attempts'] = 0 unless doc['attempts']
         end
@@ -271,49 +259,42 @@ module Sunspot
 
         # Save the entry to the database.
         def save
-          id = self.class.collection.save(doc)
-          doc['_id'] = id if id
+          doc['_id'] ||= BSON::ObjectId.new
+
+          self.class.collection.find('_id' => doc['_id']).upsert(doc)
+
+          doc
         end
 
         # Implementation of the set_error! method.
         def set_error!(error, retry_interval = nil)
-          begin
-            self.attempts += 1
-            self.lock = nil
-            self.error = "#{error.class.name}: #{error.message}\n#{error.backtrace.join("\n")[0, 4000]}"
-            self.run_at = (retry_interval * attempts).from_now.utc if retry_interval
-            self.save
-          rescue => e
-            if self.class.logger
-              self.class.logger.warn(error)
-              self.class.logger.warn(e)
-            end
+          self.attempts += 1
+          self.lock = nil
+          self.error = "#{error.class.name}: #{error.message}\n#{error.backtrace.join("\n")[0, 4000]}"
+          self.run_at = (retry_interval * attempts).from_now.utc if retry_interval
+          self.save
+        rescue => e
+          if self.class.logger
+            self.class.logger.warn(error)
+            self.class.logger.warn(e)
           end
         end
 
         # Implementation of the reset! method.
         def reset!
-          begin
-            self.attempts = 0
-            self.lock = nil
-            self.error = nil
-            self.run_at = Time.now.utc
-            self.save
-          rescue => e
-            self.class.logger.warn(e) if self.class.logger
-          end
+          self.attempts = 0
+          self.lock = nil
+          self.error = nil
+          self.run_at = Time.now.utc
+          self.save
+        rescue => e
+          self.class.logger.warn(e) if self.class.logger
         end
 
         def == (value)
-          value.is_a?(self.class) && ((id && id == value.id) || (doc == value.doc))
+          value.is_a?(self.class) && ((id && id == value.id) || doc == value.doc)
         end
       end
-    end
-  end
-
-  class Mongo::Server::Description
-    def standalone?
-      replica_set_name.nil? && !mongos? && !ghost?
     end
   end
 end

@@ -2,7 +2,7 @@ module Sunspot
   class IndexQueue
     # Batch of entries to be indexed with Solr.
     class Batch
-      attr_reader :entries, :queue, :delete_entries
+      attr_reader :queue, :entries, :delete_entries
 
       # Errors that cause batch processing to stop and are immediately passed on to the caller. All other
       # are logged on the entry on the assumption that they can be fixed later while other entries can still
@@ -34,8 +34,8 @@ module Sunspot
       ensure
         # Avoid memory leaks when processing queue in multiple threads
         @queue = nil
-        @entries.clear
-        @delete_entries.clear
+        self.entries.clear
+        self.delete_entries.clear
       end
 
       private
@@ -46,9 +46,7 @@ module Sunspot
         clear_processed
 
         if in_batch
-          session.batch do
-            self.entries.each { |entry| submit_entry(entry) }
-          end
+          session.batch { self.entries.each { |entry| submit_entry(entry) } }
         else
           self.entries.each { |entry| submit_entry(entry) }
         end
@@ -95,21 +93,24 @@ module Sunspot
 
       # Update an entry with an error message if a block fails.
       def log_entry_error(entry)
-        begin
-          yield
-          entry.processed = true
+        yield
+
+        entry.processed = true
+
+        unless self.delete_entries.include?(entry)
           self.delete_entries << entry
-        rescue Exception => e
-          if PASS_THROUGH_EXCEPTIONS.include?(e.class)
-            raise e
-          else
-            entry.set_error!(e, self.queue.retry_interval)
-          end
+        end
+      rescue Exception => e
+        if PASS_THROUGH_EXCEPTIONS.include?(e.class)
+          raise e
+        else
+          entry.set_error!(e, self.queue.retry_interval)
         end
       end
 
       # Clear the processed flag on all entries.
       def clear_processed
+        self.delete_entries.clear
         self.entries.each { |entry| entry.processed = false }
       end
 

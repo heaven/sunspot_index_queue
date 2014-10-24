@@ -85,7 +85,7 @@ describe Sunspot::IndexQueue do
   end
   
   context "processing" do
-    let(:queue) { Sunspot::IndexQueue.new(:batch_size => 2, :session => mock(:session)) }
+    let(:queue) { Sunspot::IndexQueue.new(:batch_size => 2, :session => double(:session), :autocommit => true) }
     let(:entry_1) { Sunspot::IndexQueue::Entry::MockImpl.new(:record => record_1, :delete => true) }
     let(:entry_2) { Sunspot::IndexQueue::Entry::MockImpl.new(:record => record_2, :delete => true) }
     let(:entry_3) { Sunspot::IndexQueue::Entry::MockImpl.new(:record => record_3, :delete => true) }

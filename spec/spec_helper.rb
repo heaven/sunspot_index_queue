@@ -24,6 +24,19 @@ end
 
 require File.expand_path('../../lib/sunspot_index_queue', __FILE__)
 
+RSpec.configure do |config|
+  config.mock_with :rspec do |c|
+    c.syntax = [:should, :expect]
+  end
+
+  config.expect_with :rspec do |c|
+    c.syntax = [:should, :expect]
+  end
+
+  config.filter_run :focus => true
+  config.run_all_when_everything_filtered = true
+end
+
 module Sunspot
   class IndexQueue
     module Test
