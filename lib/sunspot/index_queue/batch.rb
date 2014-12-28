@@ -25,11 +25,10 @@ module Sunspot
       rescue Exception => e
         begin
           clear_processed
-          self.entries.each { |entry| entry.reset! } if PASS_THROUGH_EXCEPTIONS.include?(e.class)
+          self.entries.each(&:reset!) if PASS_THROUGH_EXCEPTIONS.include?(e.class)
         ensure
           # Use a more specific error to indicate Solr is down.
-          e = SolrNotResponding.new(e.message) if e.is_a?(Errno::ECONNREFUSED)
-          raise e
+          raise e.is_a?(Errno::ECONNREFUSED) ? SolrNotResponding.new(e.message) : e
         end
       ensure
         # Avoid memory leaks when processing queue in multiple threads
@@ -53,25 +52,21 @@ module Sunspot
 
         commit!
       rescue Exception => e
-        if PASS_THROUGH_EXCEPTIONS.include?(e.class)
-          raise e
+        raise(e) if PASS_THROUGH_EXCEPTIONS.include?(e.class)
+
+        if in_batch
+          submit(false)
         else
-          if in_batch
-            submit(false)
-          else
-            self.entries.each do |entry|
-              entry.set_error!(e, self.queue.retry_interval) unless entry.processed?
-            end
+          self.entries.each do |entry|
+            entry.set_error!(e, self.queue.retry_interval) unless entry.processed?
           end
         end
-      ensure
-        nil
       end
 
       # Send the Solr commit command and delete the entries if it succeeds.
       def commit!
-        session.commit if queue.autocommit
-        Entry.delete_entries(self.delete_entries) unless self.delete_entries.empty?
+        queue.autocommit && session.commit
+        self.delete_entries.any? && Entry.delete_entries(self.delete_entries)
       rescue Exception => e
         clear_processed
         raise e
@@ -84,9 +79,8 @@ module Sunspot
         log_entry_error(entry) do
           if entry.is_delete?
             session.remove_by_id(entry.record_class_name, entry.record_id)
-          else
-            record = entry.record
-            session.index(record) if record
+          elsif entry.record
+            session.index(entry.record)
           end
         end
       end
@@ -101,11 +95,9 @@ module Sunspot
           self.delete_entries << entry
         end
       rescue Exception => e
-        if PASS_THROUGH_EXCEPTIONS.include?(e.class)
-          raise e
-        else
-          entry.set_error!(e, self.queue.retry_interval)
-        end
+        raise(e) if PASS_THROUGH_EXCEPTIONS.include?(e.class)
+
+        entry.set_error!(e, self.queue.retry_interval)
       end
 
       # Clear the processed flag on all entries.
