@@ -134,7 +134,7 @@ module Sunspot
             #
             # docs.compact.map { |doc| new(doc) }
 
-            # Perform just 2 queries instead of 100,
+            # Perform just 2 queries instead of queue.batch_size,
             #  can't work with multiple batch processors
             docs = collection.find(conditions).
               sort(:priority => -1, :record_class_name => 1, :run_at => 1).
@@ -151,7 +151,7 @@ module Sunspot
             find_or_create(
               { :record_class_name => klass.name, :record_id => id, :lock => nil },
               { :record_class_name => 1, :record_id => 1 },
-              { '$set' => { :is_delete => delete, :run_at => Time.now.utc }, '$max' => { :priority => priority } }
+              { '$set' => { :is_delete => delete, :run_at => 5.seconds.from_now }, '$max' => { :priority => priority } }
             )
           end
 
