@@ -60,6 +60,11 @@ module Sunspot
             new(doc) if doc
           end
 
+          def find_or_create(spec, sort, update)
+            doc = collection.find(spec).sort(sort).modify(update, { :upsert => true, :new => true })
+            new(doc) if doc
+          end
+
           # Default conditions with included/excluded classes
           def conditions(queue)
             conditions = Hash.new
@@ -143,12 +148,11 @@ module Sunspot
 
           # Implementation of the add method.
           def add(klass, id, delete, priority)
-            queue_entry_key = { :record_id => id, :record_class_name => klass.name, :lock => nil }
-            queue_entry = find_one(queue_entry_key) || new(queue_entry_key.merge(:priority => priority))
-            queue_entry.is_delete = delete
-            queue_entry.priority = priority if priority > queue_entry.priority
-            queue_entry.run_at = Time.now.utc
-            queue_entry.save
+            find_or_create(
+              { :record_class_name => klass.name, :record_id => id, :lock => nil },
+              { :record_class_name => 1, :record_id => 1 },
+              { '$set' => { :is_delete => delete, :run_at => Time.now.utc }, '$max' => { :priority => priority } }
+            )
           end
 
           # Implementation of the delete_entries method.
