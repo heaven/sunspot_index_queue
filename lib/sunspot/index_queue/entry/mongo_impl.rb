@@ -41,7 +41,7 @@ module Sunspot
               @collection = @connection.use(@database_name)["sunspot_index_queue_entries"]
 
               @collection.indexes.create(:record_class_name => 1, :record_id => 1)
-              @collection.indexes.create(:priority => -1, :record_class_name => 1, :run_at => 1, :lock => 1)
+              @collection.indexes.create(:priority => -1, :run_at => 1, :lock => 1, :record_class_name => 1)
             end
 
             @collection
@@ -119,14 +119,17 @@ module Sunspot
           # Implementation of the next_batch! method.
           def next_batch!(queue)
             now = Time.now.utc
-            conditions = conditions(queue).merge({ :run_at => { '$lte' => now }, :lock => nil })
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
+            conditions = {
+              :priority => { '$gte' => -100 },
+              :run_at => { '$lte' => now },
+              :lock => nil }.merge(conditions(queue))
+
             # docs = []
             #
             # loop do
-            #   docs << collection.find(conditions).
-            #     sort(:priority => -1, :record_class_name => 1, :run_at => 1).
+            #   docs << collection.find(conditions).sort(:priority => -1, :run_at => 1).
             #     modify({ '$set' => { :error => nil, :lock => lock, :run_at => run_at } }, { :new => true })
             #
             #   break if docs.size == queue.batch_size or not docs.last
@@ -137,8 +140,7 @@ module Sunspot
             # Perform just 2 queries instead of queue.batch_size,
             #  can't work with multiple batch processors
             docs = collection.find(conditions).
-              sort(:priority => -1, :record_class_name => 1, :run_at => 1).
-              limit(queue.batch_size).to_a
+              sort(:priority => -1, :run_at => 1).limit(queue.batch_size).to_a
 
             collection.find('_id' => { '$in' => docs.map { |d| d['_id'] }}).
               update_all('$set' => { :error => nil, :lock => lock, :run_at => run_at })
