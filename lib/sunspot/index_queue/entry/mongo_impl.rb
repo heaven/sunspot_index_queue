@@ -121,10 +121,7 @@ module Sunspot
             now = Time.now.utc
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
-            conditions = {
-              :priority => { '$gte' => -100 },
-              :run_at => { '$lte' => now },
-              :lock => nil }.merge(conditions(queue))
+            conditions = { :run_at => { '$lte' => now }, :lock => nil }.merge(conditions(queue))
 
             # docs = []
             #
