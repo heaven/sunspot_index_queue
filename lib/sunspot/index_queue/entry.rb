@@ -106,8 +106,8 @@ module Sunspot
         # This can be faster than calling load on each DataAccessor
         # depending on the implementation
         def load_all_records(entries)
-          entries.group_by { |e| e.record_class_name }.each do |class_name, entries|
-            ids = entries.find_all { |r| not r.is_delete? }.map(&:record_id)
+          entries.group_by { |e| e.record_class_name }.each do |class_name, batch|
+            ids = batch.find_all { |r| not r.is_delete? }.map(&:record_id)
             klass = Sunspot::Util.full_const_get(class_name)
             adapter = Sunspot::Adapters::DataAccessor.create(klass)
 
@@ -116,10 +116,12 @@ module Sunspot
             end
 
             adapter.load_all(ids).each do |record|
-              entry = entries.find { |r| r.record_id == record.id }
+              entry = batch.find { |r| r.record_id == record.id }
               entry.record = record if entry
             end
           end
+
+          true
         end
       end
 

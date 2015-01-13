@@ -122,6 +122,7 @@ module Sunspot
             lock = rand(0x7FFFFFFF)
             run_at = now + queue.retry_interval
             conditions = {
+              :attempts => { '$lt' => 5 },
               :priority => { '$gte' => -100 },
               :run_at => { '$lte' => now },
               :lock => nil }.merge(conditions(queue))

@@ -81,6 +81,8 @@ module Sunspot
             session.remove_by_id(entry.record_class_name, entry.record_id)
           elsif entry.record
             session.index(entry.record)
+          else
+            raise RecordNotFound, "Associated record not found"
           end
         end
       end

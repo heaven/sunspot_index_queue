@@ -13,6 +13,9 @@ module Sunspot
     # This exception will be thrown if Solr is not responding.
     class SolrNotResponding < StandardError
     end
+
+    class RecordNotFound < StandardError
+    end
     
     attr_accessor :retry_interval, :batch_size
     attr_reader :session, :class_names, :exclude_classes, :autocommit
