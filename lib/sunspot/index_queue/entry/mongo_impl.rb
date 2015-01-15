@@ -154,7 +154,7 @@ module Sunspot
             find_or_create(
               { :record_class_name => klass.name, :record_id => id, :lock => nil },
               { :record_class_name => 1, :record_id => 1 },
-              { '$set' => { :is_delete => delete, :run_at => 5.seconds.from_now, :attempts => 0 }, '$max' => { :priority => priority } }
+              { '$set' => { :is_delete => delete, :run_at => Time.now, :attempts => 0 }, '$max' => { :priority => priority } }
             )
           end
 
