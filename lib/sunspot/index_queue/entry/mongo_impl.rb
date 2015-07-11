@@ -95,7 +95,9 @@ module Sunspot
 
           # Implementation of the ready_count method.
           def ready_count(queue)
-            collection.find(conditions(queue).merge({ :run_at => { '$lte' => Time.now.utc }, :lock => nil })).count
+            collection.find(conditions(queue).merge({
+              :attempts => { '$lt' => 5 }, :run_at => { '$lte' => Time.now.utc }, :lock => nil
+            })).count
           end
 
           # Implementation of the error_count method.
