@@ -25,17 +25,17 @@ module Sunspot
       end
       
       # Does nothing in this implementation.
-      def commit
+      def commit(soft_commit = false)
         # no op
       end
       
       # Does nothing in this implementation.
-      def commit_if_delete_dirty
+      def commit_if_delete_dirty(soft_commit = false)
         # no op
       end
 
       # Does nothing in this implementation.
-      def commit_if_dirty
+      def commit_if_dirty(soft_commit = false)
         # no op
       end
       

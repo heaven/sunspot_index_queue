@@ -134,3 +134,6 @@ DEPENDENCIES
   rspec (< 3.0.0)
   sqlite3
   sunspot_index_queue!
+
+BUNDLED WITH
+   1.10.3
