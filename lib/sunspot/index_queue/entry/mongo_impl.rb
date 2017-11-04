@@ -1,5 +1,3 @@
-require 'moped'
-
 module Sunspot
   class IndexQueue
     module Entry
@@ -11,7 +9,7 @@ module Sunspot
       #   Sunspot::IndexQueue::Entry::MongoImpl.connection = 'localhost'
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       #   # or
-      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Moped::Session.new(['localhost:27017'])
+      #   Sunspot::IndexQueue::Entry::MongoImpl.connection = Mongo::Client.new(['localhost:27017'])
       #   Sunspot::IndexQueue::Entry::MongoImpl.database_name = 'my_database'
       class MongoImpl
         include Entry
@@ -19,9 +17,8 @@ module Sunspot
         class << self
           # Set the connection to MongoDB. The args can either be a Mongo::MongoClient object, or the args
           # that can be used to create a new Mongo::MongoClient.
-          def connection=(session, options = {})
-            @connection = session.is_a?(Moped::Session) ? session : Moped::Session.new(session, options)
-            @database_name = @connection.options[:database]
+          def connection=(*args)
+            @connection = args.first.is_a?(Mongo::Client) ? args.first : Mongo::Client.new(*args)
           end
 
           # Get the connection currently in use.
@@ -40,8 +37,8 @@ module Sunspot
             unless @collection
               @collection = @connection.use(@database_name)["sunspot_index_queue_entries"]
 
-              @collection.indexes.create(:record_class_name => 1, :record_id => 1)
-              @collection.indexes.create(:priority => -1, :record_class_name => 1, :run_at => 1, :lock => 1)
+              @collection.indexes.create_one(:record_class_name => 1, :record_id => 1)
+              @collection.indexes.create_one(:priority => -1, :record_class_name => 1, :run_at => 1, :lock => 1)
             end
 
             @collection
@@ -61,7 +58,8 @@ module Sunspot
           end
 
           def find_or_create(spec, sort, update)
-            doc = collection.find(spec).sort(sort).modify(update, { :upsert => true, :new => true })
+            doc = collection.find(spec).sort(sort).
+              find_one_and_update(update, { :upsert => true, :return_document => :after })
             new(doc) if doc
           end
 
@@ -113,7 +111,7 @@ module Sunspot
 
           # Implementation of the reset! method.
           def reset!(queue)
-            collection.find(conditions(queue)).update_all('$set' => {
+            collection.find(conditions(queue)).update_many('$set' => {
               :run_at => Time.now.utc, :attempts => 0, :error => nil, :lock => nil
             })
           end
@@ -133,7 +131,10 @@ module Sunspot
             #
             # loop do
             #   docs << collection.find(conditions).sort(:priority => -1, :run_at => 1).
-            #     modify({ '$set' => { :error => nil, :lock => lock, :run_at => run_at } }, { :new => true })
+            #     find_one_and_update(
+            #       { '$set' => { :error => nil, :lock => lock, :run_at => run_at } },
+            #       { :upsert => true, :return_document => :after }
+            #     )
             #
             #   break if docs.size == queue.batch_size or not docs.last
             # end
@@ -141,12 +142,12 @@ module Sunspot
             # docs.compact.map { |doc| new(doc) }
 
             # Perform just 2 queries instead of queue.batch_size,
-            #  can't work with multiple batch processors
+            #  wouldn't work well with multiple batch processors
             docs = collection.find(conditions).
               sort(:priority => -1, :record_class_name => 1, :run_at => 1).limit(queue.batch_size).to_a
 
             collection.find('_id' => { '$in' => docs.map { |d| d['_id'] }}).
-              update_all('$set' => { :error => nil, :lock => lock, :run_at => run_at })
+              update_many('$set' => { :error => nil, :lock => lock, :run_at => run_at })
 
             docs.map { |d| new(d.merge('run_at' => run_at, 'lock' => lock, 'error' => nil)) }
           end
@@ -162,7 +163,7 @@ module Sunspot
 
           # Implementation of the delete_entries method.
           def delete_entries(entries)
-            collection.find(:_id => { '$in' => entries.map(&:id) }).remove_all
+            collection.find(:_id => { '$in' => entries.map(&:id) }).delete_many
           end
         end
 

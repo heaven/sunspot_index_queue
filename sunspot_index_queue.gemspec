@@ -55,7 +55,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency(%q<dm-aggregates>, [">= 1.0.0"])
   s.add_development_dependency(%q<dm-migrations>, [">= 1.0.0"])
   s.add_development_dependency(%q<dm-sqlite-adapter>, [">= 1.0.0"])
-  s.add_development_dependency(%q<moped>, [">= 0"])
+  s.add_development_dependency(%q<mongo>, [">= 2.4.0"])
   s.add_development_dependency(%q<redis>, [">= 0"])
   s.add_development_dependency(%q<rspec>, ["< 3.0.0"])
   s.add_development_dependency(%q<jeweler>, [">= 0"])
