@@ -271,7 +271,7 @@ module Sunspot
         def save
           doc['_id'] ||= BSON::ObjectId.new
 
-          self.class.collection.find('_id' => doc['_id']).upsert(doc)
+          self.class.collection.find_one_and_update(doc, { :upsert => true })
 
           doc
         end
