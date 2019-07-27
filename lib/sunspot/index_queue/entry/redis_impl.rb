@@ -116,7 +116,7 @@ module Sunspot
             sliced_object_array
           end
 
-          def add(klass, id, delete, priority)
+          def add(klass, id, delete, priority, id_prefix = nil)
             redis_object = if @connection.hexists(@datastore_name, "#{klass.name}_#{id}") && !find_entry("#{klass.name}_#{id}").is_locked
                              find_entry("#{klass.name}_#{id}")
                            else

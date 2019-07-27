@@ -82,7 +82,7 @@ module Sunspot
           end
 
           # Implementation of the add method.
-          def add(klass, id, delete, priority)
+          def add(klass, id, delete, priority, id_prefix = nil)
             queue_entry_key = {:record_id => id, :record_class_name => klass.name, :lock => nil}
             queue_entry = first(:conditions => queue_entry_key) || new(queue_entry_key.merge(:priority => priority))
             queue_entry.is_delete = delete

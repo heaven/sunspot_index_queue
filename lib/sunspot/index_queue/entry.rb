@@ -79,7 +79,7 @@ module Sunspot
         end
 
         # Add multiple entries to the queue. +delete+ will be true if the entry is a delete.
-        def enqueue(queue, klass, ids, delete, priority)
+        def enqueue(queue, klass, ids, delete, priority, id_prefix = nil)
           klass = Sunspot::Util.full_const_get(klass.to_s) unless klass.is_a?(Class)
 
           unless queue.class_names.empty? || queue.class_names.include?(klass.name)
@@ -89,11 +89,11 @@ module Sunspot
           priority = priority.to_i
 
           if ids.is_a?(Array)
-            ids.each do |id|
-              implementation.add(klass, id, delete, priority)
+            ids.each_with_index do |id, i|
+              implementation.add(klass, id, delete, priority, Sunspot::Util::Array(id_prefix)[i])
             end
           else
-            implementation.add(klass, ids, delete, priority)
+            implementation.add(klass, ids, delete, priority, id_prefix)
           end
         end
 

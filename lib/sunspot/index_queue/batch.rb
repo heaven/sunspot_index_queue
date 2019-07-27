@@ -78,7 +78,7 @@ module Sunspot
       def submit_entry(entry)
         log_entry_error(entry) do
           if entry.is_delete?
-            session.remove_by_id(entry.record_class_name, entry.record_id)
+            session.remove_by_id("#{entry.id_prefix}#{entry.record_class_name}", entry.record_id)
           elsif entry.record
             session.index(entry.record)
           else

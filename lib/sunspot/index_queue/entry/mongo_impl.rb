@@ -153,11 +153,12 @@ module Sunspot
           end
 
           # Implementation of the add method.
-          def add(klass, id, delete, priority)
+          def add(klass, id, delete, priority, id_prefix = nil)
             find_or_create(
               { :record_class_name => klass.name, :record_id => id, :lock => nil },
               { :record_class_name => 1, :record_id => 1 },
-              { '$set' => { :is_delete => delete, :run_at => Time.now, :attempts => 0 }, '$max' => { :priority => priority } }
+              { '$set' => { :is_delete => delete, :run_at => Time.now, :attempts => 0, :id_prefix => id_prefix },
+                '$max' => { :priority => priority } }
             )
           end
 
@@ -184,6 +185,10 @@ module Sunspot
         # Get the entry id.
         def id
           doc['_id']
+        end
+
+        def id_prefix
+          doc['id_prefix']
         end
 
         # Get the entry id.

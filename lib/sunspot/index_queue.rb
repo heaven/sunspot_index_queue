@@ -94,16 +94,16 @@ module Sunspot
     # as hash with :class and :id keys. The priority to be indexed can be passed in the options as +:priority+
     # (defaults to 0).
     def index(record_or_hash, options = {})
-      klass, id = class_and_id(record_or_hash)
+      klass, id, id_prefix = class_and_id(record_or_hash)
       Entry.enqueue(self, klass, id, false, options[:priority] || self.class.default_priority)
     end
-    
+
     # Add a record to be removed to the queue. The record can be specified as either an indexable object or as
     # as hash with :class and :id keys. The priority to be indexed can be passed in the options as +:priority+
     # (defaults to 0).
     def remove(record_or_hash, options = {})
-      klass, id = class_and_id(record_or_hash)
-      Entry.enqueue(self, klass, id, true, options[:priority] || self.class.default_priority)
+      klass, id, id_prefix = class_and_id(record_or_hash)
+      Entry.enqueue(self, klass, id, true, options[:priority] || self.class.default_priority, id_prefix)
     end
 
     # Add a list of records to be indexed to the queue. The priority to be indexed can be passed in the
@@ -115,35 +115,35 @@ module Sunspot
     # Add a list of records to be removed to the queue. The priority to be indexed can be passed in the
     # options as +:priority+ (defaults to 0).
     def remove_all(klass, ids, options = {})
-      Entry.enqueue(self, klass, ids, true, options[:priority] || self.class.default_priority)
+      Entry.enqueue(self, klass, ids, true, options[:priority] || self.class.default_priority, options[:id_prefixes])
     end
-    
+
     # Get the number of entries to be processed in the queue.
     def total_count
       Entry.total_count(self)
     end
-    
+
     # Get the number of entries in the queue that are ready to be processed.
     def ready_count
       Entry.ready_count(self)
     end
-    
+
     # Get the number of entries that have errors in the queue.
     def error_count
       Entry.error_count(self)
     end
-    
+
     # Get the entries in the queue that have errors. Supported options are +:limit+ (default 50) and +:offset+ (default 0).
     def errors(options = {})
       limit = options[:limit] ? options[:limit].to_i : 50
       Entry.errors(self, limit, options[:offset].to_i)
     end
-    
+
     # Reset all entries in the queue to clear errors and set them to be indexed immediately.
     def reset!
       Entry.reset!(self)
     end
-    
+
     # Process the queue. Exits when there are no more entries to process at the current time.
     # Returns the number of entries processed.
     #
@@ -173,15 +173,34 @@ module Sunspot
 
       count
     end
-    
+
     private
-    
+
     # Get the class and id for either a record or a hash containing +:class+ and +:id+ options
     def class_and_id(record_or_hash)
       if record_or_hash.is_a?(Hash)
-        [record_or_hash[:class], record_or_hash[:id]]
+        if record_or_hash[:class].include?("!")
+          # Extract ID Prefix from the class name
+          [
+            record_or_hash[:class].gsub(/[^!]+!/, ""),
+            record_or_hash[:id],
+            record_or_hash[:class].match(/([^!]+!)+/)[0]
+          ]
+        else
+          # Try load the object and get ID prefix from the adapter
+          record  = Sunspot::Adapters::DataAccessor.create(record_or_hash[:class]).load(record_or_hash[:id])
+          adapted = record && Sunspot::Adapters::InstanceAdapter.adapt(record)
+
+          adapted ?
+            [record_or_hash[:class], adapted.id, adapted.id_prefix] :
+            [record_or_hash[:class], record_or_hash[:id]]
+        end
       else
-        [record_or_hash.class, Sunspot::Adapters::InstanceAdapter.adapt(record_or_hash).id]
+        # Get ID from Sunspot's instance adapter
+        adapted = Sunspot::Adapters::InstanceAdapter.adapt(record_or_hash)
+
+        adapted &&
+          [record_or_hash.class, adapted.id, adapted.id_prefix]
       end
     end
   end
