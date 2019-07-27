@@ -179,7 +179,7 @@ module Sunspot
     # Get the class and id for either a record or a hash containing +:class+ and +:id+ options
     def class_and_id(record_or_hash)
       if record_or_hash.is_a?(Hash)
-        if record_or_hash[:class].include?("!")
+        if record_or_hash[:class].is_a?(String) and record_or_hash[:class].include?("!")
           # Extract ID Prefix from the class name
           [
             record_or_hash[:class].gsub(/[^!]+!/, ""),
@@ -188,7 +188,9 @@ module Sunspot
           ]
         else
           # Try load the object and get ID prefix from the adapter
-          record  = Sunspot::Adapters::DataAccessor.create(record_or_hash[:class]).load(record_or_hash[:id])
+          klass   = record_or_hash[:class].is_a?(String) ?
+            Sunspot::Util.full_const_get(record_or_hash[:class]) : record_or_hash[:class]
+          record  = Sunspot::Adapters::DataAccessor.create(klass).load(record_or_hash[:id])
           adapted = record && Sunspot::Adapters::InstanceAdapter.adapt(record)
 
           adapted ?
